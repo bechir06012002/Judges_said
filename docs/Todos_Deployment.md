@@ -555,12 +555,22 @@ deploy rather than once per visitor. That is the single biggest thing the €7 b
       load your searches."* — the backend's `ALLOWED_ORIGINS` still named the old URL, so CORS
       rejected an origin that was only a few characters different. **Whenever the frontend URL
       changes, `ALLOWED_ORIGINS` and the Supabase Auth redirect list must both change with it.**
-- [ ] Re-enable Supabase email confirmation if it was switched off for local development
-- [ ] Sign up with a real address on the live site and confirm the mail arrives
-- [ ] End-to-end on the deployed URL: ask in German, ask in English, switch answer language,
-      open a citation, and confirm the refusal path still fires for an out-of-corpus question
-- [ ] Confirm the RDG guardrail survived deployment — ask for success chances and check the
-      refusal comes back
+- [x] Signed in on the live site and the thread list loads — the deployment is working end to
+      end, frontend through nginx and TLS to the container, out to Supabase over IPv6.
+
+Still worth doing deliberately rather than assuming, since these exercise paths a smoke test
+does not:
+
+- [ ] Ask in English and switch answer language on an existing answer — confirms the
+      re-language path reuses stored citations instead of re-running retrieval, so both
+      language versions cite the same decisions.
+- [ ] Ask something the corpus cannot answer and confirm the refusal, rather than an invented
+      citation.
+- [ ] **Confirm the RDG guardrail survived deployment** — ask for success chances
+      (*"wie hoch sind meine Erfolgsaussichten?"*) and check the refusal comes back. This is
+      the compliance control; a prompt-only version of it would be worth nothing, so it is
+      worth seeing fire in production at least once.
+- [ ] Re-enable Supabase email confirmation if it was switched off for local development.
 
 ---
 
@@ -588,6 +598,22 @@ so the behaviour is not mistaken for breakage.
       about it.
 - [ ] Decide on a minimal uptime check (even a free one like UptimeRobot hitting `/health`) so
       an outage is noticed before a user reports it.
+- [ ] **Recreate the DuckDNS token.** It was exposed in a screenshot during setup, and it is
+      what authorises repointing the domain at another IP.
+
+### Shutting the deployment down
+
+This was provisioned for a short demo, so the exit matters as much as the setup:
+
+- [ ] **Delete the Hetzner server — do not merely power it off.** A stopped server still bills;
+      only deleting stops the charge. Billing is hourly against a ~€23/month cap, so a few days
+      is roughly €3, invoiced the following month rather than upfront.
+- [ ] Take a **snapshot first** if the machine should be restorable later — a few cents per
+      month, and it saves redoing Phases 2 and 3.
+- [ ] The Render static site and Supabase project are free and can simply be left, though a
+      free Supabase project pauses after about a week idle.
+- [ ] If the site is being shown to anyone afterwards, remove the live URL from the README so
+      the link does not rot in a portfolio.
 
 ---
 
