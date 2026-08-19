@@ -7,7 +7,7 @@ decision date, and the statutory provisions the ruling turns on.
 It shows **precedent, never predictions**. That is a compliance boundary enforced in code, not a
 stylistic preference.
 
-**▶ Live: [judges-said.onrender.com](https://judges-said.onrender.com)** — the API runs separately
+**▶ Live: [judges-said-l49g.onrender.com](https://judges-said-l49g.onrender.com)** — the API runs separately
 at `judges-said.duckdns.org`. The database sleeps after a week of inactivity, so a first request
 after a long idle period can be slow while it wakes.
 

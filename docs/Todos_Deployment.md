@@ -515,14 +515,22 @@ deploy rather than once per visitor. That is the single biggest thing the €7 b
       with `/**` on the redirect entry. The wildcard matters because auth can return the user to
       `/chat/:threadId`; a single `*` matches one path segment only and would break thread links.
 
-- [ ] **Outstanding: the SPA rewrite on Render is not active.** Reproduced from outside —
-      `/` returns 200 but `/chat`, `/login`, and `/chat/<id>` all return **404**, served by
-      Render itself (`rndr-id` header, `Content-Type: text/plain`), while `/index.html` returns
-      200. So the rule is missing or misconfigured, not a propagation delay. Until it is fixed,
-      the app works when navigated but **breaks on reload or on any shared deep link**.
-      The rule must read source `/*`, destination `/index.html`, action **Rewrite** (not
-      Redirect). `render.yaml` in the repo already declares it correctly, so recreating the
-      service as a Blueprint is the more reliable route than the dashboard form.
+- [x] **SPA rewrite fixed by deploying as a Blueprint** rather than a hand-made static site.
+      `/`, `/login`, `/chat`, and `/chat/<id>` all return 200. Adding the rule through the
+      dashboard form repeatedly failed to take effect — the fix that worked was letting Render
+      read it from `render.yaml`, which is the argument for keeping deploy config in the repo
+      rather than in a dashboard.
+
+      **The live URL is `https://judges-said-l49g.onrender.com`, not
+      `judges-said.onrender.com`.** Render appends a random suffix when the preferred name is
+      already taken, and it was still held by the hand-made service at the moment the Blueprint
+      was created. Deleting the old service afterwards does **not** hand the name back.
+
+      This produced a failure worth remembering because it looks nothing like its cause: the
+      site loaded fine and the user was signed in, but every request failed with *"Could not
+      load your searches."* — the backend's `ALLOWED_ORIGINS` still named the old URL, so CORS
+      rejected an origin that was only a few characters different. **Whenever the frontend URL
+      changes, `ALLOWED_ORIGINS` and the Supabase Auth redirect list must both change with it.**
 - [ ] Re-enable Supabase email confirmation if it was switched off for local development
 - [ ] Sign up with a real address on the live site and confirm the mail arrives
 - [ ] End-to-end on the deployed URL: ask in German, ask in English, switch answer language,
