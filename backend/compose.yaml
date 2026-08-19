@@ -40,3 +40,14 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+networks:
+  default:
+    # Supabase's direct connection (db.<ref>.supabase.co:5432) resolves to IPv6 ONLY. Without
+    # this the container gets no IPv6 route and every query dies with "Network is unreachable"
+    # — while /health still passes, because that endpoint never touches the database.
+    #
+    # Enabling it on the daemon (/etc/docker/daemon.json: ipv6 + ip6tables + fixed-cidr-v6)
+    # is necessary but NOT sufficient: that covers the default bridge, and Compose builds its
+    # own network, which defaults to IPv6 off regardless.
+    enable_ipv6: true
