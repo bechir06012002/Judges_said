@@ -200,3 +200,6 @@ document in `license_note`.
 This tool provides **legal information, not legal advice**. It surfaces how German courts have
 ruled in comparable cases. It does not assess anyone's individual case and does not predict how any
 dispute will turn out.
+
+## Demo
+
