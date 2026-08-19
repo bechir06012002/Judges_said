@@ -7,9 +7,7 @@ decision date, and the statutory provisions the ruling turns on.
 It shows **precedent, never predictions**. That is a compliance boundary enforced in code, not a
 stylistic preference.
 
-**▶ Live: [judges-said-l49g.onrender.com](https://judges-said-l49g.onrender.com)** — the API runs separately
-at `judges-said.duckdns.org`. The database sleeps after a week of inactivity, so a first request
-after a long idle period can be slow while it wakes.
+**▶ Live: [judges-said-l49g.onrender.com](https://judges-said-l49g.onrender.com)**
 
 ```
 "mein Arbeitgeber hat mir während der Probezeit während einer Krankschreibung gekündigt"
@@ -22,19 +20,16 @@ after a long idle period can be slow while it wakes.
        § 1 KSchG · § 4 KSchG · § 168 SGB IX · § 22 AGG
 ```
 
-*Real decisions from the indexed corpus. Court, Aktenzeichen, date, and cited provisions are
-stored fields, not generated text; the § lists are abbreviated here for width.*
+*Court, Aktenzeichen, date, and cited provisions are stored fields, not generated text.*
 
 ---
 
 ## Why it exists
 
-German legal research sits behind Beck-online and juris subscriptions. Employees, small-business
-HR staff, and works-council members are exactly the people who need to know how courts have
-actually ruled on their situation, and exactly the people who cannot justify the licence fee.
-
-Court decisions and statutes carry **no copyright at all** in Germany (§ 5 UrhG, *amtliches Werk*).
-The evidence is public domain. Only access to it is expensive.
+German legal research sits behind Beck-online and juris subscriptions. Employees, small-business HR
+staff, and works-council members need to know how courts have actually ruled on their situation, and
+are exactly the people who cannot justify the licence fee. Court decisions and statutes carry **no
+copyright at all** in Germany (§ 5 UrhG). The evidence is public domain — only access is expensive.
 
 ---
 
@@ -42,107 +37,108 @@ The evidence is public domain. Only access to it is expensive.
 
 | | |
 | --- | --- |
-| **Hybrid retrieval** | Semantic (pgvector HNSW) and lexical (Postgres German full-text search) legs, fused with Reciprocal Rank Fusion |
-| **Bilingual queries** | Ask in German or English — the semantic leg works cross-lingually, the lexical leg gets German terms |
-| **Bilingual answers** | Switch answer language without re-running retrieval, so both versions cite the same decisions |
-| **Verbatim German evidence** | Court names, Aktenzeichen, ECLI, dates, § references, and quoted passages are never translated |
-| **Grounded answers only** | Every claim is checked against the retrieved German source text before delivery; unverifiable answers are refused |
-| **Refuses out of scope** | Outcome predictions and person/employer searches are rejected before a model is ever called |
+| **Hybrid retrieval** | Semantic (pgvector HNSW) + lexical (German full-text search), fused with Reciprocal Rank Fusion |
+| **Bilingual** | Ask in German or English; switch answer language without re-running retrieval, so both versions cite the same decisions |
+| **Evidence stays German** | Court names, Aktenzeichen, dates, § references, and quoted passages are never translated |
+| **Grounded only** | Every claim is checked against the retrieved German source; unverifiable answers are refused |
+| **Refuses out of scope** | Outcome predictions and person searches are rejected before a model is called |
 
 ---
 
 ## Stack
 
 | Layer | Choice |
-| ----- | ------ |
-| Backend | Python 3.12+ · FastAPI · Uvicorn · Pydantic v2 |
-| LLM orchestration | PydanticAI (typed output, bounded tools) |
-| LLM provider | OpenAI — answers and thread titles only |
-| Embeddings | `intfloat/multilingual-e5-base` (768-dim) run **locally** via sentence-transformers |
-| Frontend | Vite · React 19 · TypeScript · Tailwind v4 · shadcn/ui · Vercel AI SDK (UI only) |
-| Database | Supabase Postgres + `pgvector` |
-| Retrieval | pgvector HNSW + Postgres `german` full-text search, fused with RRF |
-| Migrations | SQLAlchemy models + Alembic |
+| --- | --- |
+| Backend | Python 3.12 · FastAPI · Pydantic v2 · PydanticAI |
+| LLM | OpenAI — answers and thread titles only |
+| Embeddings | `intfloat/multilingual-e5-base` (768-dim), run **locally** |
+| Frontend | Vite · React 19 · TypeScript · Tailwind v4 · shadcn/ui |
+| Database | Supabase Postgres + `pgvector` · Alembic migrations |
 | Auth | Supabase Auth, email only |
-| Hosting | Hetzner Cloud VPS (backend, Docker + nginx + Let's Encrypt) · Render Static Site (frontend) |
 
-No Next.js, no SSR, no separate managed vector database, and no LLM calls from the browser.
-Embeddings never leave the machine — there is no external embedding API.
+No SSR, no managed vector database, no LLM calls from the browser. Embeddings never leave the
+machine — there is no external embedding API.
 
-**→ [docs/Architecture.md](docs/Architecture.md)** covers the turn lifecycle, why the two retrieval
-legs get different inputs, the grounding validator, the data model, and the API.
+**→ [docs/Architecture.md](docs/Architecture.md)** — turn lifecycle, retrieval design, the grounding
+validator, data model, and API.
 
 ---
 
 ## The corpus
 
-**Source: [Open Legal Data](https://de.openlegaldata.io)**, a non-profit German legal open-data
-project whose `robots.txt` explicitly directs consumers to its API, dumps, and HuggingFace datasets
-— bulk use is invited, not merely tolerated.
+**[Open Legal Data](https://de.openlegaldata.io)**, labour jurisdiction only
+(`Arbeitsgerichtsbarkeit`). Decision text arrives as clean HTML, so there is **no OCR stage**.
 
-Currently indexed — the pilot slice is **labour jurisdiction only** (`Arbeitsgerichtsbarkeit`):
+| | Documents | Chunks |
+| --- | --- | --- |
+| Court decisions | 1,070 | 33,581 |
+| Statute sections | 5,680 | 7,844 |
+| **Total** | **6,750** | **41,425** |
 
-| | Documents | Chunks | Coverage |
-| --- | --- | --- | --- |
-| Court decisions | 1,070 | 33,581 | 42 courts, decisions from 1999–2025 |
-| Statute sections | 5,680 | 7,844 | 18 statute books |
-| **Total** | **6,750** | **41,425** | |
-
-Decision full text arrives as clean HTML, so there is **no OCR stage anywhere** in the pipeline.
-Ingestion is idempotent and resumable; embedding is the whole cost, at roughly 4.5 chunks/sec on
-CPU.
-
-See **[docs/Corpus_Download_Guide.md](docs/Corpus_Download_Guide.md)** for the download walkthrough
-and the Open Legal Data API quirks worth not rediscovering.
+See **[docs/Corpus_Download_Guide.md](docs/Corpus_Download_Guide.md)** for the download walkthrough.
 
 ---
 
-## Getting started
+## Deployment
 
-**Prerequisites:** Python 3.12+ and [uv](https://docs.astral.sh/uv/) · Node 20+ and pnpm · a
-Supabase project · an OpenAI API key · a HuggingFace token (read scope) for the corpus dumps.
-
-### 1 — Corpus
-
-```bash
-export HF_TOKEN=hf_...              # PowerShell: $env:HF_TOKEN = "hf_..."
-
-uv run scripts/download_dump.py     # court decisions  → data/downloads/cases/
-uv run scripts/download_laws.py     # statute sections → data/downloads/laws/
+```
+  Browser ──► Render static site   (React SPA, free)
+                    │ HTTPS
+              Hetzner VPS          (nginx + Let's Encrypt)
+                    │
+              Docker container     (FastAPI + e5 model, ~1.6 GB)
+                    │
+              Supabase             (Postgres + pgvector)
 ```
 
-### 2 — Backend
+The split is forced by one number: the embedding model needs **~1.6 GB of RAM**, and every free
+platform tier caps at 512 MB. Shrinking it to fit was measured and rejected — three quantization
+approaches each changed 20–100 % of *which decisions got cited*, the one thing this product cannot
+get wrong. So the backend needs a machine with real memory.
+
+Four things that are easy to get wrong here:
+
+- The model is **baked into the image**, so a container start never waits on a 1 GB download, and
+  runs **one uvicorn worker** — each worker would load its own copy.
+- nginx disables `proxy_buffering` on `/chat/stream`; the default buffers the whole SSE response and
+  makes streaming look like a hang.
+- The container port binds to `127.0.0.1` — Docker's iptables rules otherwise bypass the firewall and
+  expose the API without TLS.
+- Docker needs **IPv6 enabled on both the daemon and the Compose network**. Supabase's direct
+  connection is IPv6-only, and without it `/health` still returns 200 while every query fails.
+
+Full checklist, including hosts evaluated and rejected:
+**[docs/Todos_Deployment.md](docs/Todos_Deployment.md)**
+
+---
+
+## Running it locally
+
+**Prerequisites:** Python 3.12 + [uv](https://docs.astral.sh/uv/) · Node 20 + pnpm · a Supabase
+project · an OpenAI API key · a HuggingFace token.
 
 ```bash
+export HF_TOKEN=hf_...
+uv run scripts/download_dump.py     # court decisions
+uv run scripts/download_laws.py     # statute sections
+
 cd backend
 cp .env.example .env                # Supabase, DATABASE_URL, OPENAI_API_KEY
-uv sync
-uv run alembic upgrade head
-uv run ingest_to_db.py --limit 50   # smoke run; omit --limit for everything
+uv sync && uv run alembic upgrade head
+uv run ingest_to_db.py --limit 50   # omit --limit for the full corpus
 uv run uvicorn app.main:app --reload
+
+cd ../frontend
+cp .env.example .env
+pnpm install && pnpm dev            # http://localhost:5173
 ```
 
-Use the **direct** Supabase connection (port 5432), not the transaction pooler (6543): migrations
-create extensions and build HNSW indexes, which need session-level access.
+Use the **direct** Supabase connection (port 5432), not the pooler: migrations create extensions and
+build HNSW indexes, which need session-level access.
 
-### 3 — Frontend
-
-```bash
-cd frontend
-cp .env.example .env                # VITE_API_BASE_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
-pnpm install
-pnpm dev                            # http://localhost:5173
-```
-
-### Tests
-
-```bash
-cd backend     && uv run pytest     # 104 tests, no network or database required
-cd ../frontend && pnpm lint && pnpm build
-```
-
-The grounding, retrieval, and ingestion tests are deliberately LLM-free — a control that can only
-be verified by asking a model is not a control.
+`cd backend && uv run pytest` runs 104 tests with no network or database. The grounding, retrieval,
+and ingestion tests are deliberately LLM-free — a control that can only be verified by asking a model
+is not a control.
 
 ---
 
@@ -150,60 +146,44 @@ be verified by asking a model is not a control.
 
 Requirements, not suggestions. Two are enforced in code.
 
-1. **RDG (Rechtsdienstleistungsgesetz).** Retrieving and citing decisions is *information*.
-   Assessing a specific person's case is a regulated *legal service*. The product stays on the
-   legal side of that line by surfacing analogous rulings and refusing to predict outcomes —
-   enforced in the grounding validator, because a prompt is not a compliance control.
-2. **No crawling of official court portals.** `rechtsprechung-im-internet.de` is `Disallow: /` for
-   every agent except `DG_JUSTICE_CRAWLER`. Case law comes from Open Legal Data only, and the
-   downloaders are rate-limited with an identifying User-Agent regardless.
-3. **§ 5 UrhG provenance** is recorded per document in `license_note` rather than left implicit.
-4. **Personal data.** Decisions are pseudonymized, not anonymized, and labour decisions routinely
-   carry **GDPR Article 9 special-category data** — health in sick-pay cases, union membership in
-   works-council cases. Residual identifiers are redacted at ingestion before anything becomes
-   searchable, personal identifiers are never indexed as searchable fields, and aggregate
-   person-queries ("has anyone sued employer X") are refused outright.
+1. **RDG.** Retrieving and citing decisions is *information*; assessing someone's case is a regulated
+   *legal service*. The product stays on the legal side by surfacing analogous rulings and refusing
+   to predict outcomes — enforced in the grounding validator, because a prompt is not a compliance
+   control.
+2. **No crawling of court portals.** `rechtsprechung-im-internet.de` is `Disallow: /`. Case law comes
+   from Open Legal Data, rate-limited with an identifying User-Agent.
+3. **§ 5 UrhG provenance** recorded per document in `license_note`.
+4. **Personal data.** Decisions are pseudonymized, not anonymized, and labour cases routinely carry
+   **GDPR Article 9 data** — health, union membership, religion. Residual identifiers are redacted at
+   ingestion, never indexed as searchable fields, and person-queries are refused outright.
 
-**Non-goals:** predicting case outcomes · individual legal advice or document drafting · person or
-employer search · crawling court portals · translating the corpus · languages beyond German and
-English · multi-tenancy, billing, or paywalls · a mobile app.
+**Non-goals:** predicting outcomes · legal advice · person or employer search · crawling court
+portals · translating the corpus · languages beyond German and English · billing or paywalls · a
+mobile app.
 
 ---
 
 ## Repository layout
 
 ```text
-Judges_said/
-├── README.md      this file
-├── docs/          architecture, corpus guide, build checklists
-├── scripts/       corpus downloaders (Open Legal Data → data/downloads/)
-├── data/          corpus payloads (gitignored, re-downloadable)
-├── backend/       FastAPI service
-└── frontend/      React SPA
+docs/          architecture, corpus guide, deployment checklist
+scripts/       corpus downloaders
+deploy/        nginx config and deploy script
+backend/       FastAPI service + Dockerfile
+frontend/      React SPA
 ```
-
----
-
-## Status
-
-The vertical slice works end to end locally: sign in, ask in German or English, receive a grounded
-answer with citation chips, open the cited passage, switch answer language, and get a clear refusal
-when the corpus has no comparable case.
-
-Remaining work is **deployment**: Railway services for both sides, migrations and ingestion against
-production Supabase, structured logging on failed turns, and verification on the deployed URL.
 
 ---
 
 ## Attribution and licence
 
 Court decisions and statutes are public domain under **§ 5 UrhG** (*amtliches Werk*). Corpus data
-comes from **[Open Legal Data](https://de.openlegaldata.io)**, whose provenance is recorded per
-document in `license_note`.
+comes from **[Open Legal Data](https://de.openlegaldata.io)**, with provenance recorded per document
+in `license_note`.
 
-This tool provides **legal information, not legal advice**. It surfaces how German courts have
-ruled in comparable cases. It does not assess anyone's individual case and does not predict how any
-dispute will turn out.
+This tool provides **legal information, not legal advice**. It surfaces how German courts have ruled
+in comparable cases. It does not assess anyone's individual case and does not predict how any dispute
+will turn out.
 
 ## Demo
 https://github.com/user-attachments/assets/cbfa0f90-aab7-48d8-809e-c605d569d227
