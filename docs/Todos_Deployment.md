@@ -355,23 +355,29 @@ float16 instead of float32, halving both the column and the index.
       few days' use in August is billed in early September, not upfront. **~€3 for three days**
       against a ~€23/month cap. The rule that actually matters is below: a *powered-off* server
       still bills, only deleting it stops the charge.
-- [ ] Attach a **Hetzner Cloud Firewall** (free) allowing inbound **22, 80, 443 only**. This is
-      the exact inverse of Oracle's trap: on Hetzner the box is reachable from the whole internet
-      the moment it boots, so the mistake to avoid is leaving ports *open*, not forgetting to
-      open them. SSH brute-force attempts begin within minutes of first boot.
-- [ ] Harden SSH on first login — `PasswordAuthentication no` and
-      `PermitRootLogin prohibit-password` in `/etc/ssh/sshd_config`, then `systemctl restart ssh`.
-      Verify the key still works **in a second terminal before closing the first one**; locking
-      yourself out is recoverable only through Hetzner's rescue console.
-- [ ] `apt update && apt upgrade`, then install **Docker Engine + the Compose plugin** from
-      Docker's own apt repository (not Docker Desktop — this is a headless server).
-- [ ] Enable `unattended-upgrades`. Nothing else is going to patch this machine.
-- [ ] Add **2 GB of swap** (`fallocate`, `mkswap`, `swapon`, plus an `/etc/fstab` entry). 4 GB is
-      comfortable for *running* the service, but the image build that installs torch can spike;
-      swap turns a possible OOM kill mid-build into a merely slow build.
-- [ ] Point a domain or subdomain at the server: **A record → the IPv4**, and the AAAA → the IPv6
-      while you are there. Phase 3's TLS step needs it. Hetzner Cloud does not sell domains —
-      register anywhere and host DNS on Cloudflare or Hetzner DNS, both free.
+- [x] **Firewall active** (`ufw`, host-level rather than the Hetzner Cloud Firewall): default
+      deny inbound, allowing **22, 80, 443** only, IPv4 and IPv6. Rule 22 was added *before*
+      enabling, since enabling a default-deny firewall over SSH with no SSH rule locks you out.
+- [x] **SSH hardened, key-only.** `sshd -T` confirms `passwordauthentication no`,
+      `permitrootlogin without-password`, `pubkeyauthentication yes`. Note for Ubuntu 24.04: it
+      ships cloud-init drop-ins under `/etc/ssh/sshd_config.d/` that can re-enable password auth
+      and silently override the main config, so those are patched too. Key access was
+      re-verified on a fresh connection immediately after the reload.
+- [x] `apt upgrade` run; **Docker Engine 29.7.2 + Compose v5.5.0** installed from Docker's own
+      apt repository, plus nginx 1.24.0.
+- [x] `unattended-upgrades` enabled.
+- [x] **2 GB swap added** and persisted in `/etc/fstab`.
+
+**Actual server, as provisioned:** 2 vCPU AMD EPYC-Genoa, **3.7 GB RAM, 75 GB disk** — this is
+the CPX22 (Regular Performance) tier, not the CX23 planned above, because Cost-Optimized was not
+offered. The extra disk is welcome: the built image is **5.69 GB**, more than double the ~2.5 GB
+estimate, which would have been uncomfortable on CX23's 40 GB after a few rebuilds.
+- [x] **Domain: `judges-said.duckdns.org` → 46.225.237.78** (DuckDNS, free). Verified it both
+      resolves and actually reaches this server before requesting a certificate — a
+      Let's Encrypt HTTP-01 challenge against a domain pointing somewhere else fails in a
+      confusing way, and the failed attempts count against rate limits.
+      *Security note:* the DuckDNS token controls where the domain points and was exposed in a
+      screenshot during setup — it should be recreated from the DuckDNS page.
 - [ ] **Understand the billing before leaving it running.** Hetzner bills hourly, capped at the
       monthly price, and a **powered-off server keeps billing** — only *deleting* it stops the
       charge. The same rule is what makes experiments cheap: a server run for one afternoon costs
@@ -414,20 +420,37 @@ server that does not exist yet.
       is retrieval plus an LLM call plus validation plus a possible regeneration. CORS is left
       to the application — setting it in both places produces duplicate headers, which browsers
       reject.
-- [ ] Get the code onto the server (`git clone` over SSH) and build the image **on the server
-      itself** with `./deploy/deploy.sh`. Because the architecture matches, building locally
-      and pushing through a registry would also work — but it adds a registry for no benefit,
-      and the 2 vCPU box builds this image fine.
-- [ ] Put the 8 required values in `backend/.env` **on the server only**, `chmod 600`, never in
-      the image and never in git: `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
-      `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`,
-      `OPENAI_TRANSLATION_MODEL`, `ALLOWED_ORIGINS`
-- [ ] Install nginx, copy `deploy/nginx.conf` to `/etc/nginx/sites-available/judges-said`,
-      **replace `server_name api.example.com` with the real hostname**, symlink it into
-      `sites-enabled`, remove the default site, `nginx -t`, reload. Then `certbot --nginx -d
-      <host>` for the certificate and `systemctl enable --now certbot.timer` — renewal does not
-      happen on its own.
-- [ ] Verify `/health` returns 200 over HTTPS from outside the VM
+- [x] Repo cloned to `/opt/judges-said` and the image **built on the server** — 5.69 GB, and
+      the 2 vCPU box handled it without trouble.
+- [x] The 8 values are in `/opt/judges-said/backend/.env`, `chmod 600`, root-owned, copied over
+      SSH rather than through git. Confirmed still matched by `.gitignore` on the server.
+- [x] **Container running and healthy**, published to **`127.0.0.1:8000`** — verified from
+      outside that `http://<ip>:8000/health` is refused, so the API is not reachable except
+      through nginx.
+- [x] **Model verified loading inside the container** — the check that `/health` cannot make.
+      `embed_query` returns a 768-dimension unit vector, loaded from the baked cache with no
+      download, in ~12 s cold. Container sat at **885 MB of its 3 GB limit**, host at 1.0 GB of
+      3.7 GB, so there is real headroom rather than a near-miss.
+- [ ] Consider setting `HF_HUB_OFFLINE=1` in the container. Startup currently still contacts
+      the HuggingFace Hub (it logs an unauthenticated-request warning) even though the weights
+      come from the baked cache — which makes container start depend on an external service it
+      does not actually need.
+- [ ] Set `ALLOWED_ORIGINS` to the real Render URL — still `["http://localhost:5173"]`, so the
+      deployed frontend will be blocked by CORS until this changes (Phase 5).
+- [x] **nginx installed and configured** from `deploy/nginx.conf` with the real hostname
+      substituted, default site removed. One gotcha worth recording: a request issued
+      immediately after `systemctl reload nginx` returned 404 because the reload had not
+      completed — retrying gave 200. Do not debug a config that is merely mid-reload.
+- [x] **TLS issued via certbot** (`--redirect`), and `certbot.timer` active. `certbot renew
+      --dry-run` **passed**, which is what actually proves renewal works rather than assuming
+      the timer implies it.
+- [x] **Verified certbot did not clobber the SSE configuration.** certbot rewrites the nginx
+      file in place to insert TLS, so the hand-written `location /chat/stream` block with
+      `proxy_buffering off` had to be re-checked afterwards — it survived intact. Had it been
+      dropped, streaming would have broken in a way that looks like the model hanging.
+- [x] **Verified from outside the server:** `https://judges-said.duckdns.org/health` returns
+      200 with a valid chain, `http://` 301-redirects to `https://`, and `/threads` returns 401
+      without a token — so auth is enforced in the deployed configuration, not just locally.
 - [ ] **Verify a real question end to end** — confirms the model loaded inside the container.
       Never trust a green health check alone: the model loads lazily on first search
       ([embeddings.py:30](../backend/app/ingestion/embeddings.py#L30)), so `/health` returns
@@ -456,8 +479,14 @@ deploy rather than once per visitor. That is the single biggest thing the €7 b
 - [ ] Create the service on Render as a **Static Site — not a Web Service.** A Web Service is
       the 512 MB, spin-down tier Phase 0 ruled out; static sites are free, always-on, and
       served from a CDN. Either point Render at `render.yaml` as a Blueprint, or set root
-      directory `frontend/`, build `corepack enable && pnpm install --frozen-lockfile && pnpm
-      build`, publish `./dist` by hand.
+      directory `frontend/`, build **`pnpm install --frozen-lockfile && pnpm build`**, publish
+      `./dist` by hand.
+
+      **Do not prefix the build with `corepack enable`.** It fails on Render with
+      `EROFS: read-only file system, unlink '/usr/bin/pnpm'` — the build image does not allow
+      writes to `/usr/bin`. It is also redundant: Render's image already ships pnpm 11.20.0,
+      which is exactly what `packageManager` in `package.json` pins, so the lockfile resolves
+      identically without it.
 - [ ] Set the three build-time variables: `VITE_API_BASE_URL` (the Hetzner host, `https://…`),
       `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`. **Vite inlines these at build time** — they
       must exist *before* the build runs, and changing one later needs a redeploy, not a
@@ -471,12 +500,29 @@ deploy rather than once per visitor. That is the single biggest thing the €7 b
 
 ## Phase 5 — Wire the two together
 
-- [ ] Set the backend's `ALLOWED_ORIGINS` to the real frontend origin as a JSON list in the
-      VM's `.env`, then restart the container. CORS is read once at startup
-      ([main.py:18](../backend/app/main.py#L18)), so a value change needs a restart, not just
-      a config edit.
-- [ ] Add the frontend URL to Supabase Auth → URL Configuration (site URL + redirect allow
-      list), or email confirmation links bounce back to localhost
+- [x] **`ALLOWED_ORIGINS` set** to `["https://judges-said.onrender.com","http://localhost:5173"]`
+      in the server's `.env`, container recreated — CORS is read once at startup
+      ([main.py:18](../backend/app/main.py#L18)), so editing the file alone does nothing.
+      localhost was kept so local development can still reach the deployed backend.
+      **Verified with a real preflight** rather than by reading config: `OPTIONS /threads` with
+      `Origin: https://judges-said.onrender.com` returns a matching
+      `access-control-allow-origin`, and an unrecognised origin is refused.
+- [x] **Frontend build verified to carry the right backend URL.** Vite inlines `VITE_*` at build
+      time, so the only proof is in the shipped bundle: grepping the deployed
+      `/assets/index-*.js` finds `https://judges-said.duckdns.org` and the Supabase project URL,
+      confirming the variables were present *before* the build rather than added afterwards.
+- [x] Frontend URL added to Supabase Auth → URL Configuration (site URL + redirect allow list),
+      with `/**` on the redirect entry. The wildcard matters because auth can return the user to
+      `/chat/:threadId`; a single `*` matches one path segment only and would break thread links.
+
+- [ ] **Outstanding: the SPA rewrite on Render is not active.** Reproduced from outside —
+      `/` returns 200 but `/chat`, `/login`, and `/chat/<id>` all return **404**, served by
+      Render itself (`rndr-id` header, `Content-Type: text/plain`), while `/index.html` returns
+      200. So the rule is missing or misconfigured, not a propagation delay. Until it is fixed,
+      the app works when navigated but **breaks on reload or on any shared deep link**.
+      The rule must read source `/*`, destination `/index.html`, action **Rewrite** (not
+      Redirect). `render.yaml` in the repo already declares it correctly, so recreating the
+      service as a Blueprint is the more reliable route than the dashboard form.
 - [ ] Re-enable Supabase email confirmation if it was switched off for local development
 - [ ] Sign up with a real address on the live site and confirm the mail arrives
 - [ ] End-to-end on the deployed URL: ask in German, ask in English, switch answer language,
@@ -495,15 +541,16 @@ so the behaviour is not mistaken for breakage.
       resumed from the dashboard. For anything demo-facing, plan to open it beforehand. The
       backend has no equivalent problem — the Hetzner server runs continuously, so Supabase is
       the one remaining cold-start risk in the whole stack.
-- [ ] Note it in the README so a visitor who hits a slow first load understands why
-- [ ] **Owning the VM means owning its upkeep**, which a PaaS would otherwise have absorbed:
-      OS security patches (`unattended-upgrades`), the Let's Encrypt renewal timer actually
-      firing, and noticing if the instance stops responding — there is no dashboard alerting you
-      the way a managed platform would.
-- [ ] **Watch the 40 GB disk.** This is materially tighter than the 200 GB Oracle would have
-      given, and the torch image is several GB: a handful of rebuilds leaves enough dangling
-      layers to fill it. Put `docker image prune -f` in the deploy script and check `df -h`
-      occasionally.
+- [x] Noted in the README so a visitor who hits a slow first load understands why.
+- [x] **Survives a reboot — verified rather than assumed:** container restart policy is
+      `unless-stopped`, and both `docker` and `nginx` are `enabled` in systemd.
+- [x] **Certificate renewal proven**, not just scheduled: `certbot.timer` is active *and*
+      `certbot renew --dry-run` succeeds. Current certificate is valid 89 days.
+- [x] `unattended-upgrades` enabled for OS security patches.
+- [x] **Disk checked: 14 GB of 75 GB used (19 %).** Comfortable, and much more room than the
+      CX23's 40 GB would have left — the image alone is 5.69 GB with a further ~5.8 GB of build
+      cache. `deploy.sh` prunes dangling layers on every deploy; `docker system df` is the
+      command to watch it with.
 - [ ] **The bill is now a failure mode.** An expired card or a bounced SEPA debit takes the site
       down as surely as a crash. Keep the payment method current and read the mail Hetzner sends
       about it.
@@ -514,13 +561,13 @@ so the behaviour is not mistaken for breakage.
 
 ## Phase 7 — Documentation
 
-- [ ] Update the hosting row in the README stack table — the locked stack says Railway, and the
-      real answer is Hetzner (backend) + Render Static Site (frontend)
+- [x] README hosting row corrected — was Railway, now Hetzner (backend) + Render (frontend).
+- [x] Live URL recorded in the README, with a note that the free database sleeps after a week
+      idle, so a slow first load reads as expected behaviour rather than a bug.
+- [x] Phase 8 of [Todos_Backend.md](Todos_Backend.md) marked superseded by this file.
 - [ ] Update the hosting row in the local agent-context file for the same reason (that file is
       deliberately untracked, so this is a local-only edit and must not add a link to it from
       any tracked document)
-- [ ] Mark Phase 8 of [Todos_Backend.md](Todos_Backend.md) as superseded by this file
-- [ ] Record the live URL in the README
 - [ ] Structured logging on failed turns — still open from the backend checklist, and much more
       valuable once real users can hit it
 

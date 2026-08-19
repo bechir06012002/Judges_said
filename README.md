@@ -7,6 +7,10 @@ decision date, and the statutory provisions the ruling turns on.
 It shows **precedent, never predictions**. That is a compliance boundary enforced in code, not a
 stylistic preference.
 
+**▶ Live: [judges-said.onrender.com](https://judges-said.onrender.com)** — the API runs separately
+at `judges-said.duckdns.org`. The database sleeps after a week of inactivity, so a first request
+after a long idle period can be slow while it wakes.
+
 ```
 "mein Arbeitgeber hat mir während der Probezeit während einer Krankschreibung gekündigt"
 
@@ -60,7 +64,7 @@ The evidence is public domain. Only access to it is expensive.
 | Retrieval | pgvector HNSW + Postgres `german` full-text search, fused with RRF |
 | Migrations | SQLAlchemy models + Alembic |
 | Auth | Supabase Auth, email only |
-| Hosting | Railway — one frontend service, one backend service |
+| Hosting | Hetzner Cloud VPS (backend, Docker + nginx + Let's Encrypt) · Render Static Site (frontend) |
 
 No Next.js, no SSR, no separate managed vector database, and no LLM calls from the browser.
 Embeddings never leave the machine — there is no external embedding API.

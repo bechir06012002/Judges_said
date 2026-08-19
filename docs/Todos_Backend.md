@@ -422,16 +422,21 @@ citation so `§ 622 Abs. 3 Satz 1` finds `§ 622`.
 
 ---
 
-## Phase 8 — Deployment (Railway)
+## Phase 8 — Deployment ~~(Railway)~~ → **superseded by [Todos_Deployment.md](Todos_Deployment.md)**
 
-- [ ] Backend service: Uvicorn, env vars, `ALLOWED_ORIGINS` set to the real frontend origin
-- [ ] Run `alembic upgrade head` against production Supabase (direct connection)
-- [ ] Run ingestion against production
-- [ ] Re-enable Supabase email confirmation if it was disabled for local development
+Railway is no longer the plan: it retired its free tier, and the backend needs ~1.6 GB resident
+for the embedding model, which does not fit any free platform tier. The deployment actually
+built is a **Hetzner VPS** for the backend (Docker + nginx + Let's Encrypt) and a **Render
+static site** for the frontend. That file supersedes this section and carries the full record,
+including the hosts evaluated and rejected, and the three quantization attempts made before
+accepting that the model needs a machine with real memory.
+
+Still open, and tracked there rather than here:
+
 - [ ] Structured logging (`structlog`) actually imported and used on failed turns —
-      declaring the dependency is not the same as using it
+      declaring the dependency is not the same as using it. More valuable now that real users
+      can reach the service.
 - [ ] Verify: end-to-end on the deployed URL with a real account
-- [ ] Record the deployed URL in the README
 
 ---
 

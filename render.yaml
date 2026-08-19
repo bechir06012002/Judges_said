@@ -10,7 +10,10 @@ services:
     name: judges-said
     runtime: static
     rootDir: frontend
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    # No `corepack enable` here: Render's build image is read-only under /usr/bin, so corepack
+    # fails with EROFS trying to relink pnpm. It is also unnecessary — the image already ships
+    # the pnpm version that `packageManager` in package.json pins.
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
     staticPublishPath: ./dist
 
     # Vite inlines VITE_* at BUILD time, not runtime. These must exist before the build runs,
