@@ -431,6 +431,30 @@ server that does not exist yet.
       `embed_query` returns a 768-dimension unit vector, loaded from the baked cache with no
       download, in ~12 s cold. Container sat at **885 MB of its 3 GB limit**, host at 1.0 GB of
       3.7 GB, so there is real headroom rather than a near-miss.
+- [x] **IPv6 enabled for Docker — required, and the single hardest failure to diagnose here.**
+      Supabase's direct connection (`db.<ref>.supabase.co:5432`) resolves to an **IPv6-only**
+      address. The Hetzner host had working IPv6, but Docker did not, so every database query
+      failed with `Network is unreachable` while **`/health` continued returning 200** — that
+      endpoint never touches the database. The user-visible symptom was an unrelated-looking
+      *"Could not load your searches."* in the sidebar, which initially pointed at CORS.
+
+      Two changes are needed, and the first alone does nothing:
+
+      1. `/etc/docker/daemon.json` — `{"ipv6": true, "fixed-cidr-v6": "fd00:dead:beef::/48",
+         "ip6tables": true}`, then restart Docker. **Server-side only; not in git.**
+      2. `enable_ipv6: true` on the Compose network in `backend/compose.yaml`. The daemon
+         setting covers the *default* bridge; Compose creates its own network, which defaults
+         to IPv6 off regardless.
+
+      Two traps if this is ever redone: `fixed-cidr-v6` must be valid hex (a prefix containing
+      `k` was rejected and left dockerd crash-looping), and after a few failed starts systemd
+      rate-limits the unit — `systemctl reset-failed docker.service` before retrying, or the
+      next attempt fails for a reason unrelated to the config.
+
+      Verified from inside the container afterwards: TCP to Supabase:5432 succeeds, the corpus
+      is reachable (6,750 documents / 41,425 chunks), and a real German query returns 12 fused
+      passages with both legs contributing 40 candidates each.
+
 - [ ] Consider setting `HF_HUB_OFFLINE=1` in the container. Startup currently still contacts
       the HuggingFace Hub (it logs an unauthenticated-request warning) even though the weights
       come from the baked cache — which makes container start depend on an external service it
