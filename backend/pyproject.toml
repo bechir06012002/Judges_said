@@ -16,8 +16,20 @@ dependencies = [
     "sqlalchemy>=2.0.52",
     "supabase>=2.31.0",
     "tiktoken>=0.13.0",
+    # Declared explicitly only to pin the CPU build — sentence-transformers would pull it in
+    # anyway. On Linux the default PyPI torch drags in ~3 GB of NVIDIA CUDA wheels that a
+    # CPU-only container can never use, which is pure image size and build time.
+    "torch>=2.13.0",
     "uvicorn[standard]>=0.52.3",
 ]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 # A deployed service, not a distributable library: nothing imports this by package name, so
 # there is no wheel to build and no src/ layout to satisfy.
